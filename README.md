@@ -39,15 +39,23 @@ Your `model/` directory should contain:
 
 The project has been tested with the following boards:
 - [Espressif ESP32-S3-EYE](https://docs.zephyrproject.org/latest/boards/espressif/esp32s3_eye/doc/index.html)
+- [Seeed Studio XIAO ESP32S3 Sense](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/) with OV2640 camera
 
 ## Build
 
 Choose your board:
 
-For example: Espressif ESP32-S3-EYE
+**Espressif ESP32-S3-EYE:**
 ```bash
 west build --pristine -b esp32s3_eye/esp32s3/procpu
 ```
+
+**Seeed Studio XIAO ESP32S3 Sense:**
+```bash
+west build --pristine -b xiao_esp32s3/esp32s3/procpu/sense
+```
+
+> **Note for XIAO ESP32S3 Sense:** The camera resolution is set to 160x120 in the board config file ([boards/xiao_esp32s3_procpu_sense.conf](boards/xiao_esp32s3_procpu_sense.conf)) and will be automatically downsampled to match your model's input size. Adjust `CONFIG_VIDEO_FRAME_WIDTH` and `CONFIG_VIDEO_FRAME_HEIGHT` if needed, but ensure they match one of the OV2640's supported resolutions.
 
 ## Flash
 

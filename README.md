@@ -6,8 +6,8 @@ Drop in your model > build > flash > get real-time camera inference.
 ## Initialize This Repo
 
 ```bash
-west init https://github.com/edgeimpulse/ei-zephyr-imu-inference.git
-cd ei-zephyr-imu-inference
+west init https://github.com/edgeimpulse/ei-zephyr-camera-inference.git
+cd ei-zephyr-camera-inference
 west update
 ```
 

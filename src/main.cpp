@@ -43,7 +43,7 @@ int main(void)
     // This is needed so that output of printf is output immediately without buffering
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    ei_camera_init(240, 240);
+    ei_camera_init(160, 120);
 
     ei_inference_sm(); // run state machine
 

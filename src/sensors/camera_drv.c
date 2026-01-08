@@ -135,7 +135,7 @@ static int app_query_video_info(const struct device *const video_dev,
 	for (int i = 0; caps->format_caps[i].pixelformat; i++) {
 		const struct video_format_cap *fcap = &caps->format_caps[i];
 
-		local_print("  %d width [%u; %u; %u] height [%u; %u; %u]\n",
+		local_print("  %s width [%u; %u; %u] height [%u; %u; %u]\n",
 			VIDEO_FOURCC_TO_STR(fcap->pixelformat),
 			fcap->width_min, fcap->width_max, fcap->width_step,
 			fcap->height_min, fcap->height_max, fcap->height_step);
@@ -261,7 +261,7 @@ static int app_setup_video_format(const struct device *const video_dev,
 {
 	int ret;
 
-	local_print("- Video format: %d %ux%u\n",
+	local_print("- Video format: %s %ux%u\n",
 		VIDEO_FOURCC_TO_STR(fmt->pixelformat), fmt->width, fmt->height);
 
 	ret = video_set_compose_format(video_dev, fmt);

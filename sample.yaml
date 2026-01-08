@@ -1,0 +1,11 @@
+sample:
+  description: Run inference on camera using Edge Impulse SDK for Zephyr
+    application
+  name: ei-zephyr-camera-inference
+common:
+    tags: introduction
+    harness: console
+    harness_config:
+      type: one_line
+      regex:
+        - "Hello World! (.*)"

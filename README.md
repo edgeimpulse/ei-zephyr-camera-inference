@@ -40,6 +40,8 @@ Your `model/` directory should contain:
 The project has been tested with the following boards:
 - [Espressif ESP32-S3-EYE](https://docs.zephyrproject.org/latest/boards/espressif/esp32s3_eye/doc/index.html)
 - [Seeed Studio XIAO ESP32S3 Sense](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/) with OV2640 camera
+- <img width="792" height="200" alt="image" src="https://github.com/user-attachments/assets/c4c31e24-9e9a-4798-aa46-abc73b99f5ef" />
+
 
 ## Build
 

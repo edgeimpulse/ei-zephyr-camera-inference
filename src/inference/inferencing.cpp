@@ -36,10 +36,19 @@
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
 #include "edge-impulse-sdk/dsp/numpy.hpp"
 #include "sensors/ei_camera.h"
+#include <zephyr/drivers/gpio.h>
+#include <string.h>
 
 #if (defined(EI_CLASSIFIER_SENSOR) && (EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_CAMERA))
 #error "This inference project is only for camera sensor"
 #endif
+
+// LED definitions - Nicla Vision has red and green LEDs  
+#define LED0_NODE DT_ALIAS(led0)  // Red LED
+#define LED1_NODE DT_ALIAS(led1)  // Green LED
+
+static const struct gpio_dt_spec red_led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+static const struct gpio_dt_spec green_led = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
 static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32)));
 // __attribute__((aligned(32), section(".ext_ram.bss")));
@@ -92,6 +101,11 @@ bool ei_inference_sm(void)
                     state = INFERENCE_STATE_STOP;
                     break;
                 }
+                // Quick heartbeat to show it's still looping
+                gpio_pin_set_dt(&green_led, 1);
+                k_sleep(K_MSEC(50));
+                gpio_pin_set_dt(&green_led, 0);
+                
                 state = INFERENCE_STATE_SAMPLING;   // and back sampling
                 break;
             case INFERENCE_STATE_STOP:  // in this example we never reach this state
@@ -128,6 +142,40 @@ static bool ei_run_inference(void)
     }
     else {
         display_results(&ei_default_impulse, &result);
+        
+        // LED feedback for FOMO detections
+        // Turn off both LEDs first
+        gpio_pin_set_dt(&red_led, 0);
+        gpio_pin_set_dt(&green_led, 0);
+        
+        // Check bounding boxes for detections with confidence > 0.4 (lowered threshold)
+        for (size_t ix = 0; ix < result.bounding_boxes_count; ix++) {
+            ei_impulse_result_bounding_box_t bb = result.bounding_boxes[ix];
+            if (bb.value > 0.4f) {
+                ei_printf("Detected: %s (%.2f)\n", bb.label, bb.value);
+                
+                // lamp = red LED, coffee = green LED
+                if (strcmp(bb.label, "lamp") == 0) {
+                    // lamp - blink red 3 times
+                    for (int i = 0; i < 3; i++) {
+                        gpio_pin_set_dt(&red_led, 1);
+                        k_sleep(K_MSEC(150));
+                        gpio_pin_set_dt(&red_led, 0);
+                        k_sleep(K_MSEC(150));
+                    }
+                }
+                else if (strcmp(bb.label, "coffee") == 0) {
+                    // coffee - blink green 3 times
+                    for (int i = 0; i < 3; i++) {
+                        gpio_pin_set_dt(&green_led, 1);
+                        k_sleep(K_MSEC(150));
+                        gpio_pin_set_dt(&green_led, 0);
+                        k_sleep(K_MSEC(150));
+                    }
+                }
+                break; // Only respond to first high-confidence detection
+            }
+        }
     }
 
     return ret;
@@ -140,6 +188,20 @@ static bool ei_run_inference(void)
 static bool ei_start_impulse(void)
 {
     ei_printf("Edge Impulse start inferencing on Zephyr\n");
+
+    // Initialize LEDs
+    if (!gpio_is_ready_dt(&red_led) || !gpio_is_ready_dt(&green_led)) {
+        ei_printf("ERR: LEDs not ready\n");
+    }
+    gpio_pin_configure_dt(&red_led, GPIO_OUTPUT_INACTIVE);
+    gpio_pin_configure_dt(&green_led, GPIO_OUTPUT_INACTIVE);
+    
+    // Flash both LEDs to indicate startup
+    gpio_pin_set_dt(&red_led, 1);
+    gpio_pin_set_dt(&green_led, 1);
+    k_sleep(K_MSEC(500));
+    gpio_pin_set_dt(&red_led, 0);
+    gpio_pin_set_dt(&green_led, 0);
 
     ei_printf("Inferencing settings:\n");
     ei_printf("\tClassifier interval: %.2f ms.\n", (float)EI_CLASSIFIER_INTERVAL_MS);

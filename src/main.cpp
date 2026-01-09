@@ -37,14 +37,56 @@
 #include "sensors/ei_camera.h"
 #include "inference/inferencing.h"
 #include <stdio.h>
+#include <zephyr/usb/usbd.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/drivers/gpio.h>
+
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
+
+// LED for debugging
+#define LED0_NODE DT_ALIAS(led0)
+static const struct gpio_dt_spec debug_led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
+
+void blink_pattern(int count) {
+    for (int i = 0; i < count; i++) {
+        gpio_pin_set_dt(&debug_led, 1);
+        k_sleep(K_MSEC(200));
+        gpio_pin_set_dt(&debug_led, 0);
+        k_sleep(K_MSEC(200));
+    }
+    k_sleep(K_MSEC(500));
+}
 
 int main(void)
 {
+    gpio_pin_configure_dt(&debug_led, GPIO_OUTPUT_INACTIVE);
+    
+    // 1 blink = main started
+    blink_pattern(1);
+    
     // This is needed so that output of printf is output immediately without buffering
     setvbuf(stdout, NULL, _IONBF, 0);
+    
+    LOG_INF("=== Edge Impulse Camera Inference ===");
+    printf("\n\n=== Edge Impulse Camera Inference ===\n");
+    
+    // 2 blinks = after printf
+    blink_pattern(2);
+    
+    // Wait for USB CDC to be ready
+    k_sleep(K_MSEC(2000));
+    
+    printf("Starting camera initialization...\n");
 
+    // 3 blinks = before camera init
+    blink_pattern(3);
+    
     ei_camera_init(160, 120);
 
+    // 4 blinks = camera initialized
+    blink_pattern(4);
+    
+    printf("Starting inference state machine...\n");
     ei_inference_sm(); // run state machine
 
     return 0;

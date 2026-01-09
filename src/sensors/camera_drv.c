@@ -85,12 +85,14 @@ uint8_t* camera_drv_capture(size_t* out_size)
 
 	vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
 
-    ret = video_dequeue(video_dev, &vbuf, K_FOREVER);
+    local_print("Waiting for video frame (10 second timeout)...\n");
+    ret = video_dequeue(video_dev, &vbuf, K_MSEC(10000));
     if (ret < 0) {
-        local_print("Unable to dequeue video buf\n");
-        return -1;
+        local_print("Unable to dequeue video buf (timeout or error: %d)\n", ret);
+        return NULL;
     }
 	
+    local_print("Frame captured! Size: %u bytes\n", vbuf->bytesused);
     *out_size = vbuf->bytesused;
 
     return vbuf->buffer;
@@ -264,9 +266,9 @@ static int app_setup_video_format(const struct device *const video_dev,
 	local_print("- Video format: %s %ux%u\n",
 		VIDEO_FOURCC_TO_STR(fmt->pixelformat), fmt->width, fmt->height);
 
-	ret = video_set_compose_format(video_dev, fmt);
+	ret = video_set_format(video_dev, fmt);
 	if (ret < 0) {
-		local_print("Unable to set format\n");
+		local_print("Unable to set format (error: %d)\n", ret);
 		return ret;
 	}
 
@@ -365,6 +367,12 @@ int camera_drv_init(uint16_t width, uint16_t height)
 	}
 
 	local_print("video_stream_start\n");
+	
+	/* Give camera time to stabilize and start producing frames */
+	local_print("Waiting for camera to stabilize (2 seconds)...\n");
+	k_msleep(2000);
+	
+	local_print("Camera initialization complete!\n");
 
     return ret;
 }

@@ -41,8 +41,7 @@
 #error "This inference project is only for camera sensor"
 #endif
 
-static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32)));
-// __attribute__((aligned(32), section(".ext_ram.bss")));
+static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32), section(".ext_ram.bss")));
 
 static bool ei_run_inference(void);
 static bool ei_start_impulse(void);
@@ -72,7 +71,6 @@ bool ei_inference_sm(void)
     while(INFERENCE_STATE_STOP != state) {
         switch(state){
             case INFERENCE_STATE_SAMPLING:
-                ei_printf("Taking photo...\n");
                 // capture image from camera
                 if (ei_camera_capture(snapshot_buf, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, &out_size) != 0) {
                     ei_printf("ERR: Failed to capture image from camera\n");

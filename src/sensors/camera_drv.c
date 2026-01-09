@@ -299,6 +299,7 @@ static int app_setup_video_buffers(const struct device *const video_dev,
 			local_print("Unable to alloc video buffer\n");
 			return -ENOMEM;
 		}
+		//local_print("Allocated video buffer %d at %p\n", i, vbuf->buffer);
 
 		vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
 

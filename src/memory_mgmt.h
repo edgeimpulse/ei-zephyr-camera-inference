@@ -32,70 +32,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "ei_camera.h"
-#include "camera_drv.h"
-#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
-#include "edge-impulse-sdk/dsp/image/image.hpp"
+#ifndef MEM_MGMT_H
+#define MEM_MGMT_H
 
-/**
- * @brief Initialize the camera with specified width and height.
- */
-bool ei_camera_init(uint16_t width, uint16_t height)
-{
-    int ret = camera_drv_init(width, height);
-    if (ret != 0) {
-        ei_printf("Camera init error cam width %d height %d error %d!\n", width, height, ret);
-        return false;
-    }
-    else {
-        ei_printf("Camera initialised!\n");
-    }
-    
-    return (ret == 0);
-}
+extern void init_external_heap();
 
-/**
- * @brief Capture an image from the camera into the provided buffer.
- */
-int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* out_size)
-{
-    uint8_t* p_buffer = nullptr;
-
-    if (buffer == nullptr || width == 0 || height == 0) {
-        ei_printf("Invalid buffer\n");
-        return -1;
-    }
-    
-    p_buffer = camera_drv_capture(out_size);
-
-    if (p_buffer == nullptr) {
-        ei_printf("p_buffer zero\n");
-        return -1;
-    }
-
-    if (*out_size == 0) {
-        ei_printf("out_size zero\n");
-        return -1;
-    }
-
-    ei::image::processing::crop_and_interpolate_image(
-            p_buffer,
-            CONFIG_VIDEO_FRAME_WIDTH,
-            CONFIG_VIDEO_FRAME_HEIGHT,
-            buffer,
-            width,
-            height,
-            2);
-
-    camera_drv_start_capture();
-    
-    return 0;
-}
-
-/**
- * @brief Check if the frame buffer is ready.
- */
-bool ei_camera_get_fb_ready(void)
-{
-    return false;
-}
+#endif // MEM_MGMT_H

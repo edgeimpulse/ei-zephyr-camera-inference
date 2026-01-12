@@ -41,7 +41,11 @@
 #error "This inference project is only for camera sensor"
 #endif
 
-static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32), section(".ext_ram.bss")));
+#if defined(INFERENCE_BUFFER_USE_SECTION) && (INFERENCE_BUFFER_USE_SECTION != 0)
+static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32), section(INFERENCE_BUFFER_SECTION_NAME)));
+#else
+static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32)));
+#endif
 
 static bool ei_run_inference(void);
 static bool ei_start_impulse(void);
@@ -72,6 +76,7 @@ bool ei_inference_sm(void)
         switch(state){
             case INFERENCE_STATE_SAMPLING:
                 // capture image from camera
+                ei_printf("INFERENCE_STATE_SAMPLING\r\n");
                 if (ei_camera_capture(snapshot_buf, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, &out_size) != 0) {
                     ei_printf("ERR: Failed to capture image from camera\n");
                     state = INFERENCE_STATE_STOP;
@@ -79,12 +84,12 @@ bool ei_inference_sm(void)
                 }
                 memset(snapshot_buf, 0, sizeof(snapshot_buf));     
             case INFERENCE_STATE_DATA_READY:
-                ei_printf("Data ready\n");
+                ei_printf("INFERENCE_STATE_DATA_READY\r\n");
                 // run inference, not much to do in this example
                 state = INFERENCE_STATE_RUNNING;
                 break;
             case INFERENCE_STATE_RUNNING:
-                ei_printf("run inference\n");
+                ei_printf("INFERENCE_STATE_RUNNING\r\n");
                 if (ei_run_inference() == false) {
                     ei_printf("ERR: Inference failed\n");
                     state = INFERENCE_STATE_STOP;

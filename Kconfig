@@ -45,6 +45,20 @@ config VIDEO_PIXEL_FORMAT
 	help
 	  Pixel format of the video frame. If not set, the default pixel format is used.
 
+config INFERENCE_BUFFER_USE_SECTION
+	int "Use section for inference buffer"
+	default 0
+
+config INFERENCE_BUFFER_SECTION_NAME
+	string "Section where the inference buffer will be allocated"
+	default ""
+	help
+	  Section
+
+config CONFIG_USE_SHARED_MULTI_HEAP
+	bool "Use Shared heap for system heap"
+	default n
+
 endmenu
 
 source "Kconfig.zephyr"

@@ -37,14 +37,20 @@
 #include "sensors/ei_camera.h"
 #include "inference/inferencing.h"
 #include <stdio.h>
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 
 int main(void)
 {
     // This is needed so that output of printf is output immediately without buffering
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    ei_camera_init(240, 240);
+    ei_printf("Edge Impulse Zephyr Camera Inference\r\n");
 
+    if (ei_camera_init(CONFIG_VIDEO_FRAME_WIDTH, CONFIG_VIDEO_FRAME_HEIGHT) == false) {
+        while(1) {
+            
+        }
+    }
     ei_inference_sm(); // run state machine
 
     return 0;

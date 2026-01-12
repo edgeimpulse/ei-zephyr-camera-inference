@@ -144,7 +144,7 @@ static int app_query_video_info(const struct device *const video_dev,
 	/* Get default/native format */
 	ret = video_get_format(video_dev, fmt);
 	if (ret < 0) {
-		local_print("Unable to retrieve video format\n");
+		local_print("Unable to retrieve video format %d\n", ret);
 	}
 
 	/* Adjust video format according to the configuration */
@@ -299,7 +299,7 @@ static int app_setup_video_buffers(const struct device *const video_dev,
 			local_print("Unable to alloc video buffer\n");
 			return -ENOMEM;
 		}
-		//local_print("Allocated video buffer %d at %p\n", i, vbuf->buffer);
+		local_print("Allocated video buffer %d at %p\n", i, fmt->size);
 
 		vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
 

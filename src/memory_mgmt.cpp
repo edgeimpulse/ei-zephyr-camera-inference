@@ -2,7 +2,7 @@
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include <zephyr/kernel.h>
 
-#if 1 //defined(CONFIG_VIDEO_BUFFER_USE_SHARED_MULTI_HEAP)
+#if defined(CONFIG_USE_SHARED_MULTI_HEAP)
 #include <zephyr/multi_heap/shared_multi_heap.h>
 
 #define DEBUG_MEM_MGMT 0
@@ -42,7 +42,7 @@ void ei_free(void *ptr)
 #endif    
 }
 
-#else if defined(CONFIG_USE_EXTERNAL_HEAP)
+#elif defined(CONFIG_USE_EXTERNAL_HEAP)
 
 static char Z_GENERIC_SECTION(".ext_ram.data") __aligned(8) additional_heap_buffer[0x40000];
 static struct k_heap additional_heap_pool;

@@ -55,36 +55,41 @@ bool ei_camera_init(uint16_t width, uint16_t height)
 }
 
 /**
- * @brief Convert RGB565 to Grayscale
+ * @brief Convert RGB565 to RGB888 (interleaved)
  * 
  * RGB565 format: 16 bits per pixel
  * - Red: 5 bits [15:11]
  * - Green: 6 bits [10:5]
  * - Blue: 5 bits [4:0]
  * 
- * Uses ITU-R BT.601 formula: Y = 0.299*R + 0.587*G + 0.114*B
+ * RGB888 format: 24 bits per pixel, R,G,B,R,G,B... (interleaved)
  */
-static void convert_rgb565_to_grayscale(const uint8_t* rgb565_data, uint8_t* gray_data, size_t pixel_count)
+static void convert_rgb565_to_rgb888(const uint8_t* rgb565, uint8_t* rgb888, size_t width, size_t height)
 {
+    const uint16_t* src = (const uint16_t*)rgb565;
+    size_t pixel_count = width * height;
+    
     for (size_t i = 0; i < pixel_count; i++) {
-        // RGB565 is little-endian: lower byte first, then upper byte
-        uint16_t rgb565 = (rgb565_data[i * 2 + 1] << 8) | rgb565_data[i * 2];
+        uint16_t pixel = src[i];
         
-        // Extract and expand RGB components from 5/6 bits to 8 bits
-        uint8_t r = ((rgb565 >> 11) & 0x1F) << 3;  // 5 bits -> 8 bits
-        uint8_t g = ((rgb565 >> 5) & 0x3F) << 2;   // 6 bits -> 8 bits
-        uint8_t b = (rgb565 & 0x1F) << 3;          // 5 bits -> 8 bits
+        // Extract RGB565 components
+        uint8_t r5 = (pixel >> 11) & 0x1F;  // 5 bits
+        uint8_t g6 = (pixel >> 5) & 0x3F;   // 6 bits
+        uint8_t b5 = pixel & 0x1F;          // 5 bits
         
-        // ITU-R BT.601 formula for luminance
-        gray_data[i] = (uint8_t)((299 * r + 587 * g + 114 * b) / 1000);
+        // Convert to 8-bit (scale up from 5/6 bits to 8 bits)
+        rgb888[i * 3 + 0] = (r5 * 255) / 31;  // R
+        rgb888[i * 3 + 1] = (g6 * 255) / 63;  // G
+        rgb888[i * 3 + 2] = (b5 * 255) / 31;  // B
     }
 }
 
 /**
  * @brief Capture an image from the camera into the provided buffer.
  */
-// Allocate grayscale buffer for conversion
-static uint8_t gray_buffer[CONFIG_VIDEO_FRAME_WIDTH * CONFIG_VIDEO_FRAME_HEIGHT];
+// Allocate RGB888 conversion buffer in external RAM to avoid stack overflow
+__attribute__((section(".ext_ram.bss"))) 
+static uint8_t rgb888_buffer[CONFIG_VIDEO_FRAME_WIDTH * CONFIG_VIDEO_FRAME_HEIGHT * 3];
 
 int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* out_size)
 {
@@ -97,6 +102,7 @@ int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* 
     
     p_buffer = camera_drv_capture(out_size);
 
+    // ei_printf("p_buffer %p\r\n", (void*)p_buffer);  // Debug: commented out to avoid binary data leakage
     if (p_buffer == nullptr) {
         ei_printf("ERR: Failed to capture image from camera\n");
         return -1;
@@ -107,19 +113,18 @@ int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* 
         return -1;
     }
 
-    // Convert RGB565 to Grayscale
-    size_t pixel_count = CONFIG_VIDEO_FRAME_WIDTH * CONFIG_VIDEO_FRAME_HEIGHT;
-    convert_rgb565_to_grayscale(p_buffer, gray_buffer, pixel_count);
+    // Convert RGB565 to RGB888 (interleaved)
+    convert_rgb565_to_rgb888(p_buffer, rgb888_buffer, CONFIG_VIDEO_FRAME_WIDTH, CONFIG_VIDEO_FRAME_HEIGHT);
 
-    // Now crop and interpolate from grayscale to desired size
+    // Now crop and interpolate from RGB888 to desired size
     ei::image::processing::crop_and_interpolate_image(
-            gray_buffer,
+            rgb888_buffer,
             CONFIG_VIDEO_FRAME_WIDTH,
             CONFIG_VIDEO_FRAME_HEIGHT,
             buffer,
             width,
             height,
-            1);  // 1 byte per pixel for grayscale
+            3);  // 3 bytes per pixel for RGB888
 
     camera_drv_start_capture();
     

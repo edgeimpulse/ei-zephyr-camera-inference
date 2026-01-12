@@ -35,7 +35,9 @@
 
 #include <zephyr/kernel.h>
 #include "sensors/ei_camera.h"
+#include "sensors/camera_diag.h"
 #include "inference/inferencing.h"
+#include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include <stdio.h>
 #include <zephyr/usb/usbd.h>
 #include <zephyr/logging/log.h>
@@ -76,6 +78,23 @@ int main(void)
     // Wait for USB CDC to be ready
     k_sleep(K_MSEC(2000));
     
+    // Give camera extra time to power up before diagnostics
+    printf("Waiting for camera power stabilization (3 seconds)...\n");
+    k_sleep(K_MSEC(3000));
+    
+    // Run hardware diagnostics first
+    camera_hardware_diagnostics();
+    
+    // Reinitialize the sensor (boot-time init failed due to I2C timing)
+    int ret = camera_reinit_sensor();
+    if (ret != 0) {
+        printf("WARNING: Sensor reinit failed (ret=%d), continuing anyway...\n", ret);
+    }
+    
+    // Extra delay after reinit to ensure sensor is ready
+    printf("Waiting for sensor to stabilize after reinit (2 seconds)...\n");
+    k_sleep(K_MSEC(2000));
+    
     printf("Starting camera initialization...\n");
 
     // 3 blinks = before camera init
@@ -87,6 +106,11 @@ int main(void)
     blink_pattern(4);
     
     printf("Starting inference state machine...\n");
+    ei_printf("Starting inference state machine...\n");
+    
+    // 5 blinks = before inference start
+    blink_pattern(5);
+    
     ei_inference_sm(); // run state machine
 
     return 0;

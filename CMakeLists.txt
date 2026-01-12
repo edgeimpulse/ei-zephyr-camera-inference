@@ -17,6 +17,7 @@ include(utils/cmake/utils.cmake)
 
 # Needed for colorful output
 zephyr_compile_options(-fdiagnostics-color=always)
+# Tensor arena will use internal RAM for smaller grayscale model
 #zephyr_compile_definitions(
 #    EI_CLASSIFIER_ALLOCATION_STATIC
 #    EI_TENSOR_ARENA_LOCATION=".ext_ram.bss")
@@ -33,3 +34,4 @@ target_sources(app PRIVATE src/main.cpp)
 target_sources(app PRIVATE src/inference/inferencing.cpp)
 target_sources(app PRIVATE src/sensors/ei_camera.cpp)
 target_sources(app PRIVATE src/sensors/camera_drv.c)
+target_sources(app PRIVATE src/sensors/camera_diag.c)

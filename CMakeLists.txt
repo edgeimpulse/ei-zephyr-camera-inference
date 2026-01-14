@@ -17,9 +17,9 @@ include(utils/cmake/utils.cmake)
 
 # Needed for colorful output
 zephyr_compile_options(-fdiagnostics-color=always)
-#zephyr_compile_definitions(
-#    EI_CLASSIFIER_ALLOCATION_STATIC
-#    EI_TENSOR_ARENA_LOCATION=".ext_ram.bss")
+zephyr_compile_definitions(
+    EI_CLASSIFIER_ALLOCATION_STATIC
+    EI_TENSOR_ARENA_LOCATION=".ext_ram.bss")
 
 # Project include directories
 set(INCLUDES

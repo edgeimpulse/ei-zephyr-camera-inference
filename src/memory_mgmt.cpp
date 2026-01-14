@@ -1,8 +1,8 @@
+#include <zephyr/kernel.h>
 #include "memory_mgmt.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
-#include <zephyr/kernel.h>
 
-#if defined(CONFIG_USE_SHARED_MULTI_HEAP)
+#if defined(CONFIG_USE_SHARED_MULTI_HEAP) && (CONFIG_USE_SHARED_MULTI_HEAP != 0)
 #include <zephyr/multi_heap/shared_multi_heap.h>
 
 #define DEBUG_MEM_MGMT 0

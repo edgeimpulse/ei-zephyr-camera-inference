@@ -46,8 +46,8 @@ config VIDEO_PIXEL_FORMAT
 	  Pixel format of the video frame. If not set, the default pixel format is used.
 
 config INFERENCE_BUFFER_USE_SECTION
-	int "Use section for inference buffer"
-	default 0
+	bool "Use section for inference buffer"
+	default n
 
 config INFERENCE_BUFFER_SECTION_NAME
 	string "Section where the inference buffer will be allocated"
@@ -55,7 +55,7 @@ config INFERENCE_BUFFER_SECTION_NAME
 	help
 	  Section
 
-config CONFIG_USE_SHARED_MULTI_HEAP
+config USE_SHARED_MULTI_HEAP
 	bool "Use Shared heap for system heap"
 	default n
 

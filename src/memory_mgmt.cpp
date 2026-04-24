@@ -41,7 +41,7 @@
 
 #define DEBUG_MEM_MGMT 0
 
-void *ei_malloc(size_t size) 
+void *ei_malloc(size_t size)
 {
 #if DEBUG_MEM_MGMT == 1
     ei_printf("ei_malloc: allocating %d bytes\r\n", (int)size);
@@ -53,7 +53,7 @@ void *ei_malloc(size_t size)
 #endif
 }
 
-void *ei_calloc(size_t nitems, size_t size) 
+void *ei_calloc(size_t nitems, size_t size)
 {
 #if DEBUG_MEM_MGMT == 1
     ei_printf("ei_calloc: allocating %d bytes\r\n", (int)(size * nitems));
@@ -65,7 +65,7 @@ void *ei_calloc(size_t nitems, size_t size)
 #endif
 }
 
-void ei_free(void *ptr) 
+void ei_free(void *ptr)
 {
 #if DEBUG_MEM_MGMT == 1
     ei_printf("ei_free: freeing memory at address %p\r\n", ptr);
@@ -73,7 +73,7 @@ void ei_free(void *ptr)
     shared_multi_heap_free(ptr);
 #if DEBUG_MEM_MGMT == 1
     ei_printf("after ei_free: freed %p\r\n", ptr);
-#endif    
+#endif
 }
 
 #elif defined(CONFIG_USE_EXTERNAL_HEAP) && (CONFIG_USE_EXTERNAL_HEAP != 0)
@@ -82,7 +82,7 @@ static char Z_GENERIC_SECTION(CONFIG_USE_EXTERNAL_HEAP_SECTION) additional_heap_
 static struct k_heap additional_heap_pool;
 static bool mem_heap_initialized = false;
 
-void init_external_heap(void) 
+void init_external_heap(void)
 {
     if (mem_heap_initialized == false) {
         mem_heap_initialized = true;

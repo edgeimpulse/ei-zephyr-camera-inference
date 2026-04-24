@@ -44,7 +44,7 @@ extern "C" {
 #endif
 
 extern bool camera_drv_init(uint16_t width, uint16_t height);
-extern uint8_t* camera_drv_capture(size_t* out_size);
+extern bool camera_drv_capture(uint8_t** snapshot_buffer, size_t* out_size);
 extern bool camera_drv_start_capture(void);
 
 #ifdef __cplusplus

@@ -35,6 +35,10 @@
 #ifndef MEM_MGMT_H
 #define MEM_MGMT_H
 
-extern void init_external_heap();
+#if defined(CONFIG_USE_EXTERNAL_HEAP) && (CONFIG_USE_EXTERNAL_HEAP != 0)
+
+extern void init_external_heap(void);
+
+#endif
 
 #endif // MEM_MGMT_H

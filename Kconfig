@@ -1,4 +1,4 @@
-mainmenu "Video capture sample application"
+mainmenu "EI Camera inference configuration"
 
 menu "Video capture configuration"
 
@@ -58,6 +58,24 @@ config INFERENCE_BUFFER_SECTION_NAME
 config USE_SHARED_MULTI_HEAP
 	bool "Use Shared heap for system heap"
 	default n
+	help
+		Use Shared heap for system heap
+
+config USE_EXTERNAL_HEAP
+	bool	"use additional k_heap"
+	default n
+
+config USE_EXTERNAL_HEAP_SECTION
+	string "Section for ei heap"
+	default ""
+	help
+	  Section for external heap
+
+config USE_EXTERNAL_HEAP_SIZE
+	int "Size of the external heap"
+	default 0
+	help
+	  Size of the external heap in bytes
 
 endmenu
 

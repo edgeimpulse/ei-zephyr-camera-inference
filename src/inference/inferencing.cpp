@@ -69,7 +69,7 @@ bool ei_inference_sm(void)
 {
     size_t out_size;
     ei_start_impulse();
-    
+
     state = INFERENCE_STATE_SAMPLING;
 
     while(INFERENCE_STATE_STOP != state) {
@@ -77,14 +77,11 @@ bool ei_inference_sm(void)
             case INFERENCE_STATE_SAMPLING:
                 // capture image from camera
                 ei_printf("INFERENCE_STATE_SAMPLING\r\n");
-                #if 0
                 if (ei_camera_capture(snapshot_buf, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, &out_size) != 0) {
                     ei_printf("ERR: Failed to capture image from camera\n");
                     state = INFERENCE_STATE_STOP;
                     break;
                 }
-                #endif
-                memset(snapshot_buf, 0, sizeof(snapshot_buf));     
             case INFERENCE_STATE_DATA_READY:
                 ei_printf("INFERENCE_STATE_DATA_READY\r\n");
                 // run inference, not much to do in this example

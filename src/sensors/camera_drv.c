@@ -35,30 +35,28 @@
 #include "ei_camera.h"
 #include <zephyr/device.h>
 #include <zephyr/drivers/video.h>
+#include <zephyr/drivers/uart.h>
 
 #if !DT_HAS_CHOSEN(zephyr_camera)
 #error No camera chosen in devicetree. Missing "--shield" or "--snippet video-sw-generator" flag?
 #endif
 
-static int app_query_video_info(const struct device *const video_dev,
+static int app_query_video_info(const struct device *const camera_dev,
 				struct video_caps *const caps,
 				struct video_format *const fmt);
-static int app_setup_video_selection(const struct device *const video_dev,
+static int app_setup_video_selection(const struct device *const camera_dev,
 				     const struct video_format *const fmt);
-static int app_setup_video_format(const struct device *const video_dev,
+static int app_setup_video_format(const struct device *const camera_dev,
 				  struct video_format *const fmt);
-static int app_setup_video_frmival(const struct device *const video_dev,
+static int app_setup_video_frmival(const struct device *const camera_dev,
 				   struct video_format *const fmt);
-static int app_setup_video_buffers(const struct device *const video_dev,
+static int app_setup_video_buffers(const struct device *const camera_dev,
 				   struct video_caps *const caps,
 				   struct video_format *const fmt);
 static bool RBG565ToRGB888(uint8_t *src_buf, uint8_t *dst_buf, uint32_t src_len);
 
-const static struct device *const video_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_camera));
-static struct video_buffer *vbuf = 
-&(struct video_buffer){		
-    .type = VIDEO_BUF_TYPE_OUTPUT
-};
+const static struct device *const camera_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_camera));
+static struct video_buffer *camera_vbuf = &(struct video_buffer){};
 static struct video_format fmt = {
     .type = VIDEO_BUF_TYPE_OUTPUT,
 };
@@ -66,85 +64,114 @@ static struct video_caps caps = {
     .type = VIDEO_BUF_TYPE_OUTPUT,
 };
 
-static void local_print(const char *format, ...) {
-    static char print_buf[1024] = { 0 };
-
-    va_list args;
-    va_start(args, format);
-    int r = vsnprintf(print_buf, sizeof(print_buf), format, args);
-    va_end(args);
-
-    if(r > 0) {
-        printf("%s", print_buf);
-    }
-}
-
-uint8_t* camera_drv_capture(size_t* out_size)
+bool camera_drv_capture(uint8_t** snapshot_buffer, size_t* out_size)
 {
     int ret;
-
-	vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
-
-    ret = video_dequeue(video_dev, &vbuf, K_FOREVER);
-    if (ret < 0) {
-        local_print("Unable to dequeue video buf\n");
-        return -1;
-    }
 	
-    *out_size = vbuf->bytesused;
+#if 0
+	int attempts = 0;
+    const int max_attempts = 3;
+    while (attempts < max_attempts) {
+        ret = video_dequeue(camera_dev, &camera_vbuf, K_MSEC(5000));
+        
+        if (ret == 0 && camera_vbuf != NULL) {
+            if (attempts == 0) {
+                printk("Frame captured! Size: %u bytes\n", camera_vbuf->bytesused);
+            }
+            *out_size = camera_vbuf->bytesused;
+            return camera_vbuf->buffer;
+        }
+        
+        if (attempts == 0) {
+            printk("Capture failed (ret=%d), retrying...\n", ret);
+        }
+        attempts++;
+        k_msleep(100);
+    }
+    
+    printk("Failed to capture after %d attempts\n", max_attempts);
+    return NULL;
+#else
+	if (camera_dev == NULL) {
+		printk("Video device not found\n");
+		return false;
+	}
+	if (camera_vbuf == NULL) {
+		printk("Video buffer not allocated\n");
+		return false;
+	}
+	camera_vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
 
-    return vbuf->buffer;
+	ret = video_dequeue(camera_dev, &camera_vbuf, K_FOREVER);
+	if (ret < 0) {
+		printk("Unable to dequeue video buf, error: %d\n", ret);
+		//return NULL;
+		return false;
+	}
+
+	*snapshot_buffer = camera_vbuf->buffer;
+	*out_size = camera_vbuf->bytesused;
+
+	camera_vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
+
+	ret = video_enqueue(camera_dev, camera_vbuf);
+	if (ret < 0) {
+		printk("Unable to enqueue video buf, error: %d\n", ret);
+		return false;
+	}
+	return true;
+#endif
 }
 
 bool camera_drv_start_capture(void)
 {
 	int ret;
 
-	vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
+	camera_vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
 
-	ret = video_enqueue(video_dev, vbuf);
+	ret = video_enqueue(camera_dev, camera_vbuf);
 	if (ret < 0) {
-		local_print("Unable to requeue video buf\n");
+		printk("Unable to requeue video buf, error: %d\n", ret);
 		return -2;
 	}
 
 	return (ret == 0);
 }
 
-static int app_query_video_info(const struct device *const video_dev,
+static int app_query_video_info(const struct device *const camera_dev,
 				struct video_caps *const caps,
 				struct video_format *const fmt)
 {
 	int ret;
 
-	local_print("Video device: %s", video_dev->name);
+	printk("Video device: %s", camera_dev->name);
 
-	if (!device_is_ready(video_dev)) {
-		local_print("%s: video device is not ready\n", video_dev->name);
+	if (!device_is_ready(camera_dev)) {
+		printk("%s: video device is not ready\n", camera_dev->name);
 		return -ENOSYS;
 	}
 
 	/* Get capabilities */
-	ret = video_get_caps(video_dev, caps);
+	ret = video_get_caps(camera_dev, caps);
 	if (ret < 0) {
-		local_print("Unable to retrieve video capabilities\n");
+		printk("Unable to retrieve video capabilities\n");
 		return ret;
 	}
 
-	local_print("- Capabilities:\n");
+	printk("- Capabilities:\n");
 	for (int i = 0; caps->format_caps[i].pixelformat; i++) {
 		const struct video_format_cap *fcap = &caps->format_caps[i];
 
-		local_print("  %s width [%u; %u; %u] height [%u; %u; %u]\n",
+		printk("  %s width [%u; %u; %u] height [%u; %u; %u]\n",
 			VIDEO_FOURCC_TO_STR(fcap->pixelformat),
 			fcap->width_min, fcap->width_max, fcap->width_step,
 			fcap->height_min, fcap->height_max, fcap->height_step);
 	}
 
 	/* Get default/native format */
-	ret = video_get_format(video_dev, fmt);
+	ret = video_get_format(camera_dev, fmt);
 	if (ret < 0) {
-		local_print("Unable to retrieve video format %d\n", ret);
+		printk("Unable to retrieve video format %d\n", ret);
 	}
 
 	/* Adjust video format according to the configuration */
@@ -161,7 +188,7 @@ static int app_query_video_info(const struct device *const video_dev,
 	return 0;
 }
 
-static int app_setup_video_frmival(const struct device *const video_dev,
+static int app_setup_video_frmival(const struct device *const camera_dev,
 				   struct video_format *const fmt)
 {
 	struct video_frmival frmival = {};
@@ -170,13 +197,13 @@ static int app_setup_video_frmival(const struct device *const video_dev,
 	};
 	int ret;
 
-	local_print("- Supported frame intervals for the default format:\n");
+	printk("- Supported frame intervals for the default format:\n");
 
-	while (video_enum_frmival(video_dev, &fie) == 0) {
+	while (video_enum_frmival(camera_dev, &fie) == 0) {
 		if (fie.type == VIDEO_FRMIVAL_TYPE_DISCRETE) {
-			local_print("   %u/%u", fie.discrete.numerator, fie.discrete.denominator);
+			printk("   %u/%u", fie.discrete.numerator, fie.discrete.denominator);
 		} else {
-			local_print("   [min = %u/%u; max = %u/%u; step = %u/%u]\n",
+			printk("   [min = %u/%u; max = %u/%u; step = %u/%u]\n",
 				fie.stepwise.min.numerator, fie.stepwise.min.denominator,
 				fie.stepwise.max.numerator, fie.stepwise.max.denominator,
 				fie.stepwise.step.numerator, fie.stepwise.step.denominator);
@@ -184,21 +211,21 @@ static int app_setup_video_frmival(const struct device *const video_dev,
 		fie.index++;
 	}
 
-	ret = video_get_frmival(video_dev, &frmival);
+	ret = video_get_frmival(camera_dev, &frmival);
 	if (ret == -ENOTSUP || ret == -ENOSYS) {
-		local_print("The video source does not support frame rate control\n");
+		printk("The video source does not support frame rate control\n");
 	} else if (ret < 0) {
-		local_print("Error while getting the frame interval\n");
+		printk("Error while getting the frame interval\n");
 		return ret;
 	} else if (ret == 0) {
-		local_print("- Default frame rate : %f fps\n",
+		printk("- Default frame rate : %f fps\n",
 			1.0 * frmival.denominator / frmival.numerator);
 	}
 
 	return 0;
 }
 
-static int app_setup_video_selection(const struct device *const video_dev,
+static int app_setup_video_selection(const struct device *const camera_dev,
 				     const struct video_format *const fmt)
 {
 	struct video_selection sel = {
@@ -214,13 +241,13 @@ static int app_setup_video_selection(const struct device *const video_dev,
 		sel.rect.width = CONFIG_VIDEO_SOURCE_CROP_WIDTH;
 		sel.rect.height = CONFIG_VIDEO_SOURCE_CROP_HEIGHT;
 
-		ret = video_set_selection(video_dev, &sel);
+		ret = video_set_selection(camera_dev, &sel);
 		if (ret < 0) {
-			local_print("Unable to set selection crop\n");
+			printk("Unable to set selection crop\n");
 			return ret;
 		}
 
-		local_print("Crop window set to (%u,%u)/%ux%u",
+		printk("Crop window set to (%u,%u)/%ux%u",
 			sel.rect.left, sel.rect.top, sel.rect.width, sel.rect.height);
 	}
 
@@ -230,9 +257,9 @@ static int app_setup_video_selection(const struct device *const video_dev,
 	 * and if compose is necessary
 	 */
 	sel.target = VIDEO_SEL_TGT_CROP;
-	ret = video_get_selection(video_dev, &sel);
+	ret = video_get_selection(camera_dev, &sel);
 	if (ret < 0 && ret != -ENOSYS) {
-		local_print("Unable to get selection crop\n");
+		printk("Unable to get selection crop\n");
 		return ret;
 	}
 
@@ -243,37 +270,37 @@ static int app_setup_video_selection(const struct device *const video_dev,
 		sel.rect.width = fmt->width;
 		sel.rect.height = fmt->height;
 
-		ret = video_set_selection(video_dev, &sel);
+		ret = video_set_selection(camera_dev, &sel);
 		if (ret < 0 && ret != -ENOSYS) {
-			local_print("Unable to set selection compose\n");
+			printk("Unable to set selection compose\n");
 			return ret;
 		}
 
-		local_print("Compose window set to (%u,%u)/%ux%u\n",
+		printk("Compose window set to (%u,%u)/%ux%u\n",
 			sel.rect.left, sel.rect.top, sel.rect.width, sel.rect.height);
 	}
 
 	return 0;
 }
 
-static int app_setup_video_format(const struct device *const video_dev,
+static int app_setup_video_format(const struct device *const camera_dev,
 				  struct video_format *const fmt)
 {
 	int ret;
 
-	local_print("- Video format: %s %ux%u\n",
+	printk("- Video format: %s %ux%u\n",
 		VIDEO_FOURCC_TO_STR(fmt->pixelformat), fmt->width, fmt->height);
 
-	ret = video_set_compose_format(video_dev, fmt);
+	ret = video_set_compose_format(camera_dev, fmt);
 	if (ret < 0) {
-		local_print("Unable to set format\n");
+		printk("Unable to set format\n");
 		return ret;
 	}
 
 	return 0;
 }
 
-static int app_setup_video_buffers(const struct device *const video_dev,
+static int app_setup_video_buffers(const struct device *const camera_dev,
 				   struct video_caps *const caps,
 				   struct video_format *const fmt)
 {
@@ -281,31 +308,32 @@ static int app_setup_video_buffers(const struct device *const video_dev,
 
 	/* Alloc video buffers and enqueue for capture */
 	if (caps->min_vbuf_count > CONFIG_VIDEO_BUFFER_POOL_NUM_MAX) {
-		local_print("Not enough buffers to start streaming\n");
+		printk("Not enough buffers to start streaming\n");
 		return -EINVAL;
 	}
 
-	for (int i = 0; i < CONFIG_VIDEO_BUFFER_POOL_NUM_MAX; i++) {
-		struct video_buffer *vbuf;
+	struct video_buffer *buffers[CONFIG_VIDEO_BUFFER_POOL_NUM_MAX];
 
+	for (int i = 0; i < CONFIG_VIDEO_BUFFER_POOL_NUM_MAX; i++) {
+		
 		/*
 		 * For some hardwares, such as the PxP used on i.MX RT1170 to do image rotation,
 		 * buffer alignment is needed in order to achieve the best performance
 		 */
-		local_print("Allocating video buffer %d size %u\n", i, fmt->size);
-		vbuf = video_buffer_aligned_alloc(fmt->size, CONFIG_VIDEO_BUFFER_POOL_ALIGN,
+		printk("Allocating video buffer %d size %u\n", i, fmt->size);
+		buffers[i] = video_buffer_aligned_alloc(fmt->size, CONFIG_VIDEO_BUFFER_POOL_ALIGN,
 						  K_NO_WAIT);
-		if (vbuf == NULL) {
-			local_print("Unable to alloc video buffer\n");
+		if (buffers[i] == NULL) {
+			printk("Unable to alloc video buffer\n");
 			return -ENOMEM;
 		}
-		local_print("Allocated video buffer %d at %p\n", i, fmt->size);
+		printk("Allocated video buffer %d at %p\n", i, buffers[i]->buffer);
 
-		vbuf->type = VIDEO_BUF_TYPE_OUTPUT;
+		buffers[i]->type = VIDEO_BUF_TYPE_OUTPUT;
 
-		ret = video_enqueue(video_dev, vbuf);
+		ret = video_enqueue(camera_dev, buffers[i]);
 		if (ret < 0) {
-			local_print("Failed to enqueue video buffer\n");
+			printk("Failed to enqueue video buffer\n");
 			return ret;
 		}
 	}
@@ -318,54 +346,54 @@ int camera_drv_init(uint16_t width, uint16_t height)
     int ret;
 
     /* taken from app_query_video_info in samples/drivers/video/capture/src/main.c */
-	local_print("app_query_video_info\n");
-    ret = app_query_video_info(video_dev, &caps, &fmt);
+	printk("app_query_video_info\n");
+    ret = app_query_video_info(camera_dev, &caps, &fmt);
 	if (ret < 0) {
-        local_print("Error %d\n", ret);
+        printk("Error %d\n", ret);
 		return ret;
 	}
 
     /* taken from app_setup_video_selection in samples/drivers/video/capture/src/main.c */
-	local_print("app_setup_video_selection\n");
-	ret = app_setup_video_selection(video_dev, &fmt);
+	printk("app_setup_video_selection\n");
+	ret = app_setup_video_selection(camera_dev, &fmt);
 	if (ret < 0) {
-        local_print("Error %d\n", ret);
+        printk("Error %d\n", ret);
 		return ret;
 	}
     
     /* taken from app_setup_video_format in samples/drivers/video/capture/src/main.c */
-	local_print("app_setup_video_format\n");
-	ret = app_setup_video_format(video_dev, &fmt);
+	printk("app_setup_video_format\n");
+	ret = app_setup_video_format(camera_dev, &fmt);
 	if (ret < 0) {
-        local_print("Error %d\n", ret);
+        printk("Error %d\n", ret);
 		return ret;
 	}
 
     /* taken from app_setup_video_frmival in samples/drivers/video/capture/src/main.c */
-	local_print("app_setup_video_frmival\n");
-    ret = app_setup_video_frmival(video_dev, &fmt);
+	printk("app_setup_video_frmival\n");
+    ret = app_setup_video_frmival(camera_dev, &fmt);
 	if (ret < 0) {
-        local_print("Error %d\n", ret);
+        printk("Error %d\n", ret);
 		return ret;
 	}
 
     /* taken from app_setup_video_buffers in samples/drivers/video/capture/src/main.c */
-	local_print("app_setup_video_buffers\n");
-    ret = app_setup_video_buffers(video_dev, &caps, &fmt);
+	printk("app_setup_video_buffers\n");
+    ret = app_setup_video_buffers(camera_dev, &caps, &fmt);
 	if (ret < 0) {
-        local_print("Error %d\n", ret);
+        printk("Error %d\n", ret);
 		return ret;
 	}
 
     /* taken from video_stream_start in samples/drivers/video/capture/src/main.c */
-	local_print("video_stream_start\n");
-	ret = video_stream_start(video_dev, VIDEO_BUF_TYPE_OUTPUT);
+	printk("video_stream_start\n");
+	ret = video_stream_start(camera_dev, VIDEO_BUF_TYPE_OUTPUT);
 	if (ret < 0) {
-		local_print("Unable to start capture (interface)\n");
+		printk("Unable to start capture (interface)\n");
 		return ret;
 	}
 
-	local_print("video_stream_start\n");
+	printk("video_stream_start\n");
 
     return ret;
 }

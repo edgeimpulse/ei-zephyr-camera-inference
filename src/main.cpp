@@ -38,6 +38,9 @@
 #include "inference/inferencing.h"
 #include <stdio.h>
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
+#if defined(CONFIG_USE_EXTERNAL_HEAP) && (CONFIG_USE_EXTERNAL_HEAP != 0)
+#include "memory_mgmt.h"
+#endif
 
 int main(void)
 {
@@ -46,9 +49,13 @@ int main(void)
 
     ei_printf("Edge Impulse Zephyr Camera Inference\r\n");
 
+#if defined(CONFIG_USE_EXTERNAL_HEAP) && (CONFIG_USE_EXTERNAL_HEAP != 0)
+    init_external_heap();
+#endif
+
     if (ei_camera_init(CONFIG_VIDEO_FRAME_WIDTH, CONFIG_VIDEO_FRAME_HEIGHT) == false) {
         while(1) {
-            
+
         }
     }
     ei_inference_sm(); // run state machine

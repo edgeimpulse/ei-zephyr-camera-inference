@@ -36,7 +36,7 @@
 #include "camera_drv.h"
 #include "edge-impulse-sdk/porting/ei_classifier_porting.h"
 #include "edge-impulse-sdk/dsp/image/image.hpp"
-
+#include <string.h>
 /**
  * @brief Initialize the camera with specified width and height.
  */
@@ -65,11 +65,11 @@ int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* 
         ei_printf("Invalid buffer\n");
         return -1;
     }
-    
-    p_buffer = camera_drv_capture(out_size);
+
+    camera_drv_capture(&p_buffer, out_size);
 
     if (p_buffer == nullptr) {
-        ei_printf("p_buffer zero\n");
+        ei_printf("buffer zero\n");
         return -1;
     }
 
@@ -77,7 +77,7 @@ int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* 
         ei_printf("out_size zero\n");
         return -1;
     }
-
+#if 0
     ei::image::processing::crop_and_interpolate_image(
             p_buffer,
             CONFIG_VIDEO_FRAME_WIDTH,
@@ -86,9 +86,9 @@ int ei_camera_capture(uint8_t* buffer, uint16_t width, uint16_t height, size_t* 
             width,
             height,
             2);
-
-    camera_drv_start_capture();
-    
+#else
+    memset(buffer, 0, width * height * 3);
+#endif
     return 0;
 }
 

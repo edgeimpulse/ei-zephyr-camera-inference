@@ -1,6 +1,6 @@
 sample:
-  description: Run inference on camera using Edge Impulse SDK for Zephyr
-    application
+  description: Run an Edge Impulse image model on a camera supported by the
+    Zephyr video API
   name: ei-zephyr-camera-inference
 common:
     tags: introduction
@@ -8,4 +8,4 @@ common:
     harness_config:
       type: one_line
       regex:
-        - "Hello World! (.*)"
+        - "Edge Impulse camera inferencing on Zephyr(.*)"

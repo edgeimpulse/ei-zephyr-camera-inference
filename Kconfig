@@ -1,50 +1,47 @@
-mainmenu "Video capture sample application"
+source "Kconfig.zephyr"
 
-menu "Video capture configuration"
+menu "Edge Impulse camera inference"
 
-config VIDEO_SOURCE_CROP_LEFT
-	int "Crop area left value"
+config EI_CAMERA_CAPTURE_WIDTH
+	int "Camera capture width in pixels (0: pick automatically)"
 	default 0
 	help
-	   Left value of the crop area within the video source.
+	  Resolution the sensor streams at, before the frame is cropped and
+	  scaled down to the model input size. Leave at 0 to let the app pick
+	  the smallest resolution the sensor advertises that still covers the
+	  model input, which keeps RAM use and conversion time down.
 
-config VIDEO_SOURCE_CROP_TOP
-	int "Crop area top value"
+config EI_CAMERA_CAPTURE_HEIGHT
+	int "Camera capture height in pixels (0: pick automatically)"
+	default 0
+
+config EI_CAMERA_NUM_BUFS
+	int "Number of video buffers"
+	default 2
+	range 1 8
+	help
+	  Must be at least the min_vbuf_count the camera driver reports. Two
+	  lets the sensor fill one buffer while the impulse runs on the other.
+
+config EI_CAMERA_CAPTURE_TIMEOUT_MS
+	int "How long to wait for a frame, in ms (-1: forever)"
+	default 2000
+
+config EI_CAMERA_INFERENCE_DELAY_MS
+	int "Delay between two inferences, in ms"
 	default 0
 	help
-	   Top value of the crop area within the video source.
+	  0 runs inference as fast as frames arrive.
 
-config VIDEO_SOURCE_CROP_WIDTH
-	int "Crop area width value"
-	default 0
+config EI_CAMERA_HFLIP
+	bool "Flip the image horizontally"
 	help
-	   Width value of the crop area within the video source.
-	   If set to 0, the crop is not applied.
+	  Applied by the sensor when it supports VIDEO_CID_HFLIP.
 
-config VIDEO_SOURCE_CROP_HEIGHT
-	int "Crop area height value"
-	default 0
+config EI_CAMERA_VFLIP
+	bool "Flip the image vertically"
 	help
-	   Height value of the crop area within the video source.
-	   If set to 0, the crop is not applied.
-
-config VIDEO_FRAME_HEIGHT
-	int "Height of the video frame"
-	default 0
-	help
-	  Height of the video frame. If set to 0, the default height is used.
-
-config VIDEO_FRAME_WIDTH
-	int "Width of the video frame"
-	default 0
-	help
-	  Width of the video frame. If set to 0, the default width is used.
-
-config VIDEO_PIXEL_FORMAT
-	string "Pixel format of the video frame"
-	help
-	  Pixel format of the video frame. If not set, the default pixel format is used.
+	  Applied by the sensor when it supports VIDEO_CID_VFLIP. Needed on
+	  modules whose sensor is mounted upside down.
 
 endmenu
-
-source "Kconfig.zephyr"

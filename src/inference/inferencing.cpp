@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
- * Copyright (c) 2025 EdgeImpulse Inc.
+Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,22 +31,14 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-#
+
 #include "inference/inferencing.h"
+#include "camera/ei_camera.h"
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
-#include "edge-impulse-sdk/dsp/numpy.hpp"
-#include "sensors/ei_camera.h"
-
-#if (defined(EI_CLASSIFIER_SENSOR) && (EI_CLASSIFIER_SENSOR != EI_CLASSIFIER_SENSOR_CAMERA))
-#error "This inference project is only for camera sensor"
-#endif
-
-static uint8_t snapshot_buf[EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT * 3] __attribute__((aligned(32), section(".ext_ram.bss")));
 
 static bool ei_run_inference(void);
 static bool ei_start_impulse(void);
 static bool ei_stop_impulse(void);
-static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr);
 
 typedef enum {
     INFERENCE_STATE_RUNNING,
@@ -63,34 +55,34 @@ static inference_state_t state = INFERENCE_STATE_SAMPLING;
  */
 bool ei_inference_sm(void)
 {
-    size_t out_size;
-    ei_start_impulse();
-    
+    if (ei_start_impulse() == false) {
+        return false;
+    }
     state = INFERENCE_STATE_SAMPLING;
 
-    while(INFERENCE_STATE_STOP != state) {
-        switch(state){
+    while (INFERENCE_STATE_STOP != state) {
+        switch (state) {
             case INFERENCE_STATE_SAMPLING:
-                // capture image from camera
-                if (ei_camera_capture(snapshot_buf, EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT, &out_size) != 0) {
-                    ei_printf("ERR: Failed to capture image from camera\n");
-                    state = INFERENCE_STATE_STOP;
+                /* one frame per inference, no windowing to do like on a
+                 * time series sensor
+                 */
+                if (ei_camera_capture(CONFIG_EI_CAMERA_CAPTURE_TIMEOUT_MS) == false) {
+                    /* dropped frame, try again with the next one */
                     break;
                 }
-                memset(snapshot_buf, 0, sizeof(snapshot_buf));     
+                state = INFERENCE_STATE_DATA_READY;
+                break;
             case INFERENCE_STATE_DATA_READY:
-                ei_printf("Data ready\n");
-                // run inference, not much to do in this example
                 state = INFERENCE_STATE_RUNNING;
                 break;
             case INFERENCE_STATE_RUNNING:
-                ei_printf("run inference\n");
                 if (ei_run_inference() == false) {
                     ei_printf("ERR: Inference failed\n");
-                    state = INFERENCE_STATE_STOP;
-                    break;
                 }
-                state = INFERENCE_STATE_SAMPLING;   // and back sampling
+                if (CONFIG_EI_CAMERA_INFERENCE_DELAY_MS > 0) {
+                    ei_sleep(CONFIG_EI_CAMERA_INFERENCE_DELAY_MS);
+                }
+                state = INFERENCE_STATE_SAMPLING;   // and back grabbing frames
                 break;
             case INFERENCE_STATE_STOP:  // in this example we never reach this state
                                         // but could be useful for your application
@@ -100,35 +92,35 @@ bool ei_inference_sm(void)
 
     ei_stop_impulse();
 
-    return state;
+    return true;
 }
 
 /**
- * @brief Run inference process
+ * @brief Run inference on the frame currently held by the camera driver
  * @return true if successful
  */
 static bool ei_run_inference(void)
 {
-    bool ret = true;
-    ei_impulse_result_t result = { 0};
+    ei_impulse_result_t result = {nullptr};
+    ei::signal_t features_signal;
 
-    signal_t features_signal;
+    /* the signal is one float per pixel, pulled straight out of the camera
+     * buffer by ei_camera_get_data() - no intermediate feature array
+     */
     features_signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
     features_signal.get_data = &ei_camera_get_data;
 
-    // invoke the impulse
     EI_IMPULSE_ERROR res = run_classifier(&features_signal, &result, false);
 
-    if (res != 0) {
+    if (res != EI_IMPULSE_OK) {
         ei_printf("ERR: Failed to run classifier\n");
         ei_printf("ERR: %d\n", res);
-        ret = false;
-    }
-    else {
-        display_results(&ei_default_impulse, &result);
+        return false;
     }
 
-    return ret;
+    display_results(&ei_default_impulse, &result);
+
+    return true;
 }
 
 /**
@@ -137,15 +129,20 @@ static bool ei_run_inference(void)
  */
 static bool ei_start_impulse(void)
 {
-    ei_printf("Edge Impulse start inferencing on Zephyr\n");
+    ei_printf("Edge Impulse camera inferencing on Zephyr\n");
 
     ei_printf("Inferencing settings:\n");
-    ei_printf("\tClassifier interval: %.2f ms.\n", (float)EI_CLASSIFIER_INTERVAL_MS);
-    ei_printf("\tInput frame size: %d\n", EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE);
-    ei_printf("\tNumber of output classes: %d\n", sizeof(ei_classifier_inferencing_categories) / sizeof(ei_classifier_inferencing_categories[0]));
+    ei_printf("\tImage resolution: %dx%d\n", EI_CLASSIFIER_INPUT_WIDTH,
+              EI_CLASSIFIER_INPUT_HEIGHT);
+    ei_printf("\tFrame size: %d\n", EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE);
+    ei_printf("\tNumber of output classes: %d\n",
+              sizeof(ei_classifier_inferencing_categories) /
+                  sizeof(ei_classifier_inferencing_categories[0]));
 
-    // let's start, we will continuously run inference
-    run_classifier_init();
+    if (ei_camera_start() == false) {
+        ei_printf("ERR: Failed to start the camera\n");
+        return false;
+    }
 
     return true;
 }
@@ -157,35 +154,8 @@ static bool ei_start_impulse(void)
 static bool ei_stop_impulse(void)
 {
     ei_printf("Stopping inferencing\n");
+    ei_camera_stop();
     state = INFERENCE_STATE_STOP;
 
     return true;
-}
-
-/**
- *
- * @param offset
- * @param length
- * @param out_ptr
- * @return
- */
-static int ei_camera_get_data(size_t offset, size_t length, float *out_ptr)
-{
-    ei_printf(" ---- ei_camera_get_data offset %d length %d\n", offset, length);
-    // we already have a RGB888 buffer, so recalculate offset into pixel index
-    size_t pixel_ix = offset * 3;
-    size_t pixels_left = length;
-    size_t out_ptr_ix = 0;
-
-    while (pixels_left != 0) {
-        out_ptr[out_ptr_ix] = (snapshot_buf[pixel_ix] << 16) + (snapshot_buf[pixel_ix + 1] << 8) + snapshot_buf[pixel_ix + 2];
-
-        // go to the next pixel
-        out_ptr_ix++;
-        pixel_ix+=3;
-        pixels_left--;
-    }
-
-    // and done!
-    return 0;
 }

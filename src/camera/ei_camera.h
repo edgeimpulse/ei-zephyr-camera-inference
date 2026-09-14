@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
- * Copyright (c) 2025 EdgeImpulse Inc.
+Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,23 +32,66 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef CAMERA_DRV_H
-#define CAMERA_DRV_H
+#ifndef EI_CAMERA_H
+#define EI_CAMERA_H
 
-#include <stdint.h>
-#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*
+ * Board agnostic camera front-end for Edge Impulse image models.
+ *
+ * The camera is taken from the devicetree `zephyr,camera` chosen node, so any
+ * board (or board + camera shield) supported by the Zephyr video API works
+ * without touching this code.
+ */
 
-extern bool camera_drv_init(uint16_t width, uint16_t height);
-extern uint8_t* camera_drv_capture(size_t* out_size);
-extern bool camera_drv_start_capture(void);
+/**
+ * @brief Open the camera, negotiate a format and allocate the frame buffers.
+ * @return true if successful
+ */
+bool ei_camera_init(void);
 
-#ifdef __cplusplus
-} /*extern "C"*/
-#endif
+/**
+ * @brief Release the frame buffers taken by ei_camera_init().
+ * @return true if successful
+ */
+bool ei_camera_deinit(void);
 
-#endif // CAMERA_DRV_H
+/**
+ * @brief Start the video stream.
+ * @return true if successful
+ */
+bool ei_camera_start(void);
+
+/**
+ * @brief Stop the video stream.
+ * @return true if successful
+ */
+bool ei_camera_stop(void);
+
+/**
+ * @brief Grab one frame, convert it to RGB888 and rescale it to the model
+ *        input size. The result stays in an internal buffer that
+ *        ei_camera_get_data() reads from.
+ * @param timeout_ms how long to wait for a frame, -1 waits forever
+ * @return true if a frame was captured and prepared
+ */
+bool ei_camera_capture(int32_t timeout_ms);
+
+/**
+ * @brief signal_t callback handing pixels to the impulse, as 0x00RRGGBB floats.
+ * @param offset first pixel to return (in pixels, not bytes)
+ * @param length number of pixels to return
+ * @param out_ptr destination buffer
+ * @return 0 if successful
+ */
+int ei_camera_get_data(size_t offset, size_t length, float *out_ptr);
+
+/**
+ * @brief Resolution the camera is actually streaming at, which is not the
+ *        resolution the impulse runs on.
+ */
+void ei_camera_get_resolution(uint32_t *width, uint32_t *height);
+
+#endif /* EI_CAMERA_H */

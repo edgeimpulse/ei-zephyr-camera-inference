@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
- * Copyright (c) 2025 EdgeImpulse Inc.
+Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,9 +42,6 @@ extern "C" {
 #endif
 
 extern bool ei_inference_sm(void);
-extern bool ei_start_inference(void);
-extern bool ei_stop_inference(void);
-extern bool ei_samples_callback(const void *raw_sample, uint32_t raw_sample_size);
 
 #ifdef __cplusplus
 }

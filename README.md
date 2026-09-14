@@ -1,12 +1,17 @@
 # Edge Impulse Camera Inference on Zephyr
 
-This repository demonstrates how to run image-based Edge Impulse models on Zephyr using the **Edge Impulse Zephyr Module**.  
-Drop in your model > build > flash > get real-time camera inference.
+Run image-based Edge Impulse models (classification, object detection, visual anomaly
+detection) on any Zephyr board with a camera, using the
+**[Edge Impulse Zephyr Module](https://docs.edgeimpulse.com/hardware/deployments/run-zephyr-module)**.
+Drop in your model > build > flash > get real-time inference on the camera stream.
+
+This is the image counterpart of
+[ei-zephyr-imu-inference](https://github.com/edgeimpulse/ei-zephyr-imu-inference).
 
 ## Initialize This Repo
 
 ```bash
-west init https://github.com/edgeimpulse/ei-zephyr-camera-inference.git
+west init -m https://github.com/edgeimpulse/ei-zephyr-camera-inference.git
 cd ei-zephyr-camera-inference
 west update
 ```
@@ -18,7 +23,7 @@ This fetches:
 
 ## Update the Model
 
-In Edge Impulse Studio go to:  
+In Edge Impulse Studio go to:
 **Deployment** > **Zephyr library** > **Build**
 
 Download the generated `.zip`
@@ -35,29 +40,47 @@ Your `model/` directory should contain:
 - `model-parameters/`
 - `tflite-model/`
 
-## Supported boards
+The impulse must be an **image** impulse. The build stops with a clear error if
+`model-parameters/model_metadata.h` says otherwise.
 
-The project has been tested with the following boards:
-- [Espressif ESP32-S3-EYE](https://docs.zephyrproject.org/latest/boards/espressif/esp32s3_eye/doc/index.html)
-- [Seeed Studio XIAO ESP32S3 Sense](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/) with OV2640 camera
-- <img width="792" height="200" alt="image" src="https://github.com/user-attachments/assets/c4c31e24-9e9a-4798-aa46-abc73b99f5ef" />
+## Supported targets
 
+The application never names a board. It uses the devicetree `zephyr,camera` chosen
+node and the Zephyr video API, so anything with a camera driver works — boards with
+a camera on-module, or any board plus a camera shield.
+
+Boards with an on-module camera:
+
+| Board | `-b` argument | Camera |
+| --- | --- | --- |
+| Arduino Nicla Vision | `arduino_nicla_vision/stm32h747xx/m7` | GC2145 |
+| ESP32-S3-EYE | `esp32s3_eye/esp32s3/procpu` | OV2640 |
+| Seeed XIAO ESP32S3 Sense | `xiao_esp32s3/esp32s3/procpu/sense` | OV2640 |
+
+Any board plus a camera shield works too, for example:
+
+```bash
+west build -p -b nucleo_h743zi --shield st_stm32f4dis_cam .
+```
+
+Run `ls zephyr/boards/shields | grep -i cam` for the full list of camera shields, and
+`ls zephyr/drivers/video` for the supported sensors.
+
+Board-specific settings live in `boards/<board>.conf` (and `.overlay`), never in the
+sources. Adding a board is usually just a `.conf` with the right video buffer pool
+size — see below.
 
 ## Build
 
-Choose your board:
-
-**Espressif ESP32-S3-EYE:**
 ```bash
-west build --pristine -b esp32s3_eye/esp32s3/procpu
+west build -p -b arduino_nicla_vision/stm32h747xx/m7 .
 ```
 
-**Seeed Studio XIAO ESP32S3 Sense:**
-```bash
-west build --pristine -b xiao_esp32s3/esp32s3/procpu/sense
-```
+ESP32-S3 targets need the MCUboot bootloader, so build them with sysbuild:
 
-> **Note for XIAO ESP32S3 Sense:** The camera resolution is set to 160x120 in the board config file ([boards/xiao_esp32s3_procpu_sense.conf](boards/xiao_esp32s3_procpu_sense.conf)) and will be automatically downsampled to match your model's input size. Adjust `CONFIG_VIDEO_FRAME_WIDTH` and `CONFIG_VIDEO_FRAME_HEIGHT` if needed, but ensure they match one of the OV2640's supported resolutions.
+```bash
+west build --sysbuild -p -b esp32s3_eye/esp32s3/procpu .
+```
 
 ## Flash
 
@@ -65,19 +88,41 @@ west build --pristine -b xiao_esp32s3/esp32s3/procpu/sense
 west flash
 ```
 
-Or specify runner:
+## How it works
 
-```bash
-west flash --runner jlink
-west flash --runner nrfjprog
-west flash --runner openocd
+```
+camera (video API) -> RGB888 -> crop + rescale -> signal_t -> run_classifier -> display_results
 ```
 
+- `src/camera/ei_camera.cpp` — the board-agnostic part. Picks a pixel format the app
+  can convert (RGB565, RGB565X, RGB24, YUYV or GREY) and the smallest advertised
+  resolution that still covers the model input, converts each frame to packed RGB888,
+  then crops to the model aspect ratio and scales down with the SDK's
+  `crop_and_interpolate_rgb888()`. Pixels reach the impulse through a `signal_t`
+  callback as `0x00RRGGBB` floats, which is what the Edge Impulse image DSP block
+  expects — grayscale models are handled inside the block, so this code always feeds RGB.
+- `src/inference/inferencing.cpp` — the capture/classify state machine.
+- `src/main.cpp` — init and go.
 
+## Configuration
 
-## Resources
-- [Edge Impulse SDK for Zephyr](https://github.com/edgeimpulse/edge-impulse-sdk-zephyr)
+| Kconfig | Default | Purpose |
+| --- | --- | --- |
+| `CONFIG_EI_CAMERA_CAPTURE_WIDTH` / `_HEIGHT` | 0 | Capture resolution. 0 picks the smallest one the sensor offers that covers the model input. |
+| `CONFIG_EI_CAMERA_NUM_BUFS` | 2 | Video buffers. Must be >= the driver's `min_vbuf_count`. |
+| `CONFIG_EI_CAMERA_CAPTURE_TIMEOUT_MS` | 2000 | How long to wait for a frame. -1 waits forever. |
+| `CONFIG_EI_CAMERA_INFERENCE_DELAY_MS` | 0 | Throttle between inferences. |
+| `CONFIG_EI_CAMERA_HFLIP` / `_VFLIP` | n | Applied by the sensor when it supports the control. |
 
+### Memory
 
-Clear BSD License - see `LICENSE` file  
-Copyright (c) 2025 EdgeImpulse Inc.
+Two separate pools have to be sized for the capture resolution:
+
+- `CONFIG_VIDEO_BUFFER_POOL_HEAP_SIZE` holds the raw frames:
+  `CONFIG_EI_CAMERA_NUM_BUFS x width x height x bytes_per_pixel`.
+- `CONFIG_HEAP_MEM_POOL_SIZE` holds the RGB888 working frame (`width x height x 3`)
+  plus whatever the impulse arena needs.
+
+Both are model and resolution dependent. If the app prints
+`out of video buffers` or `out of memory for the ... RGB888 frame`, raise the
+matching one in `boards/<board>.conf`.

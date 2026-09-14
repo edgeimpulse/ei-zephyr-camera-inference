@@ -1,7 +1,6 @@
-
 /* The Clear BSD License
  *
- * Copyright (c) 2025 EdgeImpulse Inc.
+Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,7 +33,7 @@
  */
 
 #include <zephyr/kernel.h>
-#include "sensors/ei_camera.h"
+#include "camera/ei_camera.h"
 #include "inference/inferencing.h"
 #include <stdio.h>
 
@@ -43,9 +42,14 @@ int main(void)
     // This is needed so that output of printf is output immediately without buffering
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    ei_camera_init(160, 120);
+    if (ei_camera_init() == false) {
+        printf("ERR: Failed to initialize the camera\n");
+        return 0;
+    }
 
     ei_inference_sm(); // run state machine
+
+    ei_camera_deinit();
 
     return 0;
 }

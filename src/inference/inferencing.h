@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
-Copyright (c) 2026 EdgeImpulse Inc.
+ * Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,24 @@ Copyright (c) 2026 EdgeImpulse Inc.
 extern "C" {
 #endif
 
+/**
+ * @brief Run the inference state machine. Does not return until inferencing is
+ *        stopped with ei_stop_inference().
+ * @return true if the state machine exited cleanly
+ */
 extern bool ei_inference_sm(void);
+
+/**
+ * @brief Print the impulse settings and prepare the classifier.
+ * @return true if successful
+ */
+extern bool ei_start_inference(void);
+
+/**
+ * @brief Ask the state machine to leave ei_inference_sm().
+ * @return true if successful
+ */
+extern bool ei_stop_inference(void);
 
 #ifdef __cplusplus
 }

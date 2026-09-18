@@ -1,11 +1,11 @@
 sample:
-  description: Run an Edge Impulse image model on a camera supported by the
-    Zephyr video API
+  description: Capture frames from a camera and run an Edge Impulse impulse on them
   name: ei-zephyr-camera-inference
 common:
-    tags: introduction
-    harness: console
-    harness_config:
-      type: one_line
-      regex:
-        - "Edge Impulse camera inferencing on Zephyr(.*)"
+    tags: video edge-impulse
+    platform_allow:
+      - esp32s3_eye/esp32s3/procpu
+      - arduino_nicla_vision/stm32h747xx/m7
+tests:
+  sample.ei.camera.inference:
+    build_only: true

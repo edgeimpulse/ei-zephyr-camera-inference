@@ -1,47 +1,102 @@
-source "Kconfig.zephyr"
+# Copyright (c) 2026 EdgeImpulse Inc.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
 
-menu "Edge Impulse camera inference"
+mainmenu "Edge Impulse camera inferencing"
 
-config EI_CAMERA_CAPTURE_WIDTH
-	int "Camera capture width in pixels (0: pick automatically)"
-	default 0
+menu "Edge Impulse camera configuration"
+
+config EI_CAMERA_WIDTH
+	int "Camera capture width in pixels"
+	default 160
 	help
-	  Resolution the sensor streams at, before the frame is cropped and
-	  scaled down to the model input size. Leave at 0 to let the app pick
-	  the smallest resolution the sensor advertises that still covers the
-	  model input, which keeps RAM use and conversion time down.
+	  Width the camera is configured to capture at. The frame is centre-cropped
+	  to the model aspect ratio and rescaled to EI_CLASSIFIER_INPUT_WIDTH before
+	  inference, so this only needs to be a resolution the sensor supports.
 
-config EI_CAMERA_CAPTURE_HEIGHT
-	int "Camera capture height in pixels (0: pick automatically)"
-	default 0
+config EI_CAMERA_HEIGHT
+	int "Camera capture height in pixels"
+	default 120
+	help
+	  Height the camera is configured to capture at. See EI_CAMERA_WIDTH.
 
 config EI_CAMERA_NUM_BUFS
 	int "Number of video buffers"
 	default 2
-	range 1 8
+	range 1 4
 	help
-	  Must be at least the min_vbuf_count the camera driver reports. Two
-	  lets the sensor fill one buffer while the impulse runs on the other.
+	  Number of buffers in the video buffer pool used for the camera device.
+	  CONFIG_VIDEO_BUFFER_POOL_HEAP_SIZE must be large enough to hold them all.
 
-config EI_CAMERA_CAPTURE_TIMEOUT_MS
-	int "How long to wait for a frame, in ms (-1: forever)"
-	default 2000
-
-config EI_CAMERA_INFERENCE_DELAY_MS
-	int "Delay between two inferences, in ms"
-	default 0
+config EI_CAMERA_RGB565_BYTE_SWAP
+	bool "Camera delivers RGB565 high byte first"
 	help
-	  0 runs inference as fast as frames arrive.
+	  Zephyr documents VIDEO_PIX_FMT_RGB565 ("RGBP") as little endian in memory,
+	  but some capture paths hand over the two bytes the other way round while
+	  still reporting RGBP. The ESP32-S3 LCD_CAM DVP interface with the OV2640 is
+	  one of them (verified by dumping a frame). Enable this to byte swap when
+	  unpacking, which is equivalent to treating the frame as RGB565X.
+
+	  The symptom of getting this wrong is an image with the right shapes but
+	  wildly cycling rainbow colour bands, because small luminance changes end up
+	  flipping the top bits of the red channel.
+
+config EI_CAMERA_STREAM_PER_FRAME
+	bool "Start and stop the stream around every frame"
+	help
+	  video_esp32_dvp stops reloading its DMA the first time its input queue is
+	  empty and never restarts it, so with long gaps between captures (an
+	  inference takes ~175 ms) streaming dies permanently. Working around that
+	  means only streaming while a frame is actually being grabbed.
+
+	  Other drivers do not need this and may not tolerate the cycling -- STM32
+	  DCMI in particular keeps DMA state across a frame -- so leave it off and
+	  let the stream run continuously.
 
 config EI_CAMERA_HFLIP
-	bool "Flip the image horizontally"
+	bool "Mirror the captured frame horizontally"
 	help
-	  Applied by the sensor when it supports VIDEO_CID_HFLIP.
+	  Apply VIDEO_CID_HFLIP to the camera. Ignored if the sensor does not
+	  support the control.
 
 config EI_CAMERA_VFLIP
-	bool "Flip the image vertically"
+	bool "Mirror the captured frame vertically"
 	help
-	  Applied by the sensor when it supports VIDEO_CID_VFLIP. Needed on
-	  modules whose sensor is mounted upside down.
+	  Apply VIDEO_CID_VFLIP to the camera. Ignored if the sensor does not
+	  support the control.
+
+config EI_INFERENCE_INTERVAL_MS
+	int "Delay between two inferences in milliseconds"
+	default 200
+	help
+	  Time to sleep after each classification before grabbing the next frame.
+	  Set to 0 to run as fast as the camera and the model allow.
+
+config EI_HEAP_SHARED_MULTI_HEAP
+	bool "Allocate Edge Impulse memory from the shared multi heap"
+	depends on SHARED_MULTI_HEAP
+	help
+	  Route ei_malloc()/ei_calloc()/ei_free() to the shared multi heap instead
+	  of the kernel heap. The EON-compiled model allocates its tensor arena
+	  (~240 KB for the 96x96 FOMO model) on first inference; on boards where
+	  that does not fit in internal RAM but external RAM is available, such as
+	  the octal PSRAM on the ESP32-S3-EYE, this is what makes it fit.
+	  When this is disabled the arena comes out of CONFIG_HEAP_MEM_POOL_SIZE,
+	  which must then be larger than EI_CLASSIFIER_TFLITE_LARGEST_ARENA_SIZE.
+
+config EI_HEAP_SMH_ATTRIBUTE
+	int "Shared multi heap attribute to allocate from"
+	depends on EI_HEAP_SHARED_MULTI_HEAP
+	default 2
+	help
+	  Value of enum shared_multi_heap_attr to request: 0 cacheable,
+	  1 non-cacheable, 2 external memory.
+
+config EI_INFERENCE_DEBUG
+	bool "Enable Edge Impulse debug output"
+	help
+	  Pass debug=true to run_classifier, which prints the DSP features and
+	  per-layer information. Very verbose.
 
 endmenu
+
+source "Kconfig.zephyr"

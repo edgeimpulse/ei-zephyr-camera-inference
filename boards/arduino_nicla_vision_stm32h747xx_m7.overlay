@@ -1,19 +1,41 @@
 /*
- * Copyright 2024 Felipe Neves
- *
+ * Copyright (c) 2026 EdgeImpulse Inc.
  * SPDX-License-Identifier: Apache-2.0
  */
-/ {
-	chosen {
-		zephyr,console = &cdc_acm_uart0;
-		zephyr,shell-uart = &cdc_acm_uart0;
-	};
+
+#include <zephyr/dt-bindings/dma/stm32_dma.h>
+
+/*
+ * Re-describe the DCMI DMA channel with a 32-bit peripheral data width.
+ *
+ * The SoC devicetree declares STM32_DMA_PERIPH_8BITS, but DCMI_DR is a 32-bit
+ * register and ST's reference configuration uses a word-aligned peripheral
+ * side. That mismatch used to be harmless because the driver filled in the HAL
+ * DMA_InitTypeDef itself; since the DMA HAL config helper was introduced the
+ * HAL fields are derived from this cell instead, and every DCMI transfer fails
+ * with HAL_DCMI_ERROR_DMA (0x40) -- the driver then restarts the DMA forever
+ * and no frame is ever delivered.
+ */
+&dcmi {
+	dmas = <&dma1 1 75 (STM32_DMA_PERIPH_TO_MEMORY | STM32_DMA_PERIPH_NO_INC |
+			    STM32_DMA_MEM_INC | STM32_DMA_PERIPH_32BITS |
+			    STM32_DMA_MEM_32BITS |
+			    STM32_DMA_PRIORITY_HIGH) STM32_DMA_FIFO_FULL>;
 };
 
-zephyr_udc0: &usbotg_hs {
-	status = "okay";
+/*
+ * Merge SRAM1 and SRAM2 into a single 256 KB region.
+ *
+ * They are contiguous (0x30000000 + 128K = SRAM2's base) and nothing else on
+ * this board uses either of them. SRAM0 is zephyr,sram -- the main system RAM,
+ * already ~64% full because the tensor arena lives there -- so keeping the
+ * frame buffer out of it leaves real headroom. One 320x240 RGB565 frame is
+ * 153600 B, which does not fit in SRAM1's 128 KB alone.
+ */
+&sram2 {
+	status = "disabled";
+};
 
-	cdc_acm_uart0: cdc_acm_uart0 {
-		compatible = "zephyr,cdc-acm-uart";
-	};
+&sram1 {
+	reg = <0x30000000 0x40000>;
 };

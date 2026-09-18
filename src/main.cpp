@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
-Copyright (c) 2026 EdgeImpulse Inc.
+ * Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,9 +33,10 @@ Copyright (c) 2026 EdgeImpulse Inc.
  */
 
 #include <zephyr/kernel.h>
+#include <stdio.h>
+
 #include "camera/ei_camera.h"
 #include "inference/inferencing.h"
-#include <stdio.h>
 
 int main(void)
 {
@@ -43,13 +44,22 @@ int main(void)
     setvbuf(stdout, NULL, _IONBF, 0);
 
     if (ei_camera_init() == false) {
-        printf("ERR: Failed to initialize the camera\n");
-        return 0;
+        /* Returning from main() here would leave the board running but
+         * completely silent, which is indistinguishable from a hang. Keep
+         * repeating the reason so it is visible whenever a terminal attaches.
+         */
+        while (true) {
+            printk("ERR: Failed to initialize the camera\n");
+            k_sleep(K_SECONDS(2));
+        }
     }
 
     ei_inference_sm(); // run state machine
 
-    ei_camera_deinit();
+    while (true) {
+        printk("ERR: Inferencing stopped\n");
+        k_sleep(K_SECONDS(2));
+    }
 
     return 0;
 }

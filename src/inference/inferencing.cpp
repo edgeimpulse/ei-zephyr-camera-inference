@@ -1,6 +1,6 @@
 /* The Clear BSD License
  *
-Copyright (c) 2026 EdgeImpulse Inc.
+ * Copyright (c) 2026 EdgeImpulse Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,129 +32,147 @@ Copyright (c) 2026 EdgeImpulse Inc.
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <zephyr/kernel.h>
+
 #include "inference/inferencing.h"
 #include "camera/ei_camera.h"
 #include "edge-impulse-sdk/classifier/ei_run_classifier.h"
+#include "edge-impulse-sdk/dsp/numpy.hpp"
 
 static bool ei_run_inference(void);
-static bool ei_start_impulse(void);
-static bool ei_stop_impulse(void);
 
 typedef enum {
-    INFERENCE_STATE_RUNNING,
     INFERENCE_STATE_SAMPLING,
     INFERENCE_STATE_DATA_READY,
+    INFERENCE_STATE_RUNNING,
     INFERENCE_STATE_STOP
 } inference_state_t;
 
-static inference_state_t state = INFERENCE_STATE_SAMPLING;
+static inference_state_t state = INFERENCE_STATE_STOP;
 
 /**
  * @brief Inference state machine
- * @return true
+ * @return true if the state machine exited cleanly
  */
 bool ei_inference_sm(void)
 {
-    if (ei_start_impulse() == false) {
+    if (ei_start_inference() == false) {
         return false;
     }
+
     state = INFERENCE_STATE_SAMPLING;
 
     while (INFERENCE_STATE_STOP != state) {
         switch (state) {
             case INFERENCE_STATE_SAMPLING:
-                /* one frame per inference, no windowing to do like on a
-                 * time series sensor
-                 */
-                if (ei_camera_capture(CONFIG_EI_CAMERA_CAPTURE_TIMEOUT_MS) == false) {
-                    /* dropped frame, try again with the next one */
+                /* unlike a sensor feeding samples in over time, a camera gives us a
+                 * whole frame in one go, so one capture fills the input buffer */
+                if (ei_camera_capture() == false) {
+                    ei_printf("ERR: Failed to capture a frame\n");
+                    state = INFERENCE_STATE_STOP;
                     break;
                 }
                 state = INFERENCE_STATE_DATA_READY;
                 break;
+
             case INFERENCE_STATE_DATA_READY:
                 state = INFERENCE_STATE_RUNNING;
                 break;
+
             case INFERENCE_STATE_RUNNING:
                 if (ei_run_inference() == false) {
                     ei_printf("ERR: Inference failed\n");
                 }
-                if (CONFIG_EI_CAMERA_INFERENCE_DELAY_MS > 0) {
-                    ei_sleep(CONFIG_EI_CAMERA_INFERENCE_DELAY_MS);
+                if (CONFIG_EI_INFERENCE_INTERVAL_MS > 0) {
+                    ei_sleep(CONFIG_EI_INFERENCE_INTERVAL_MS);
                 }
-                state = INFERENCE_STATE_SAMPLING;   // and back grabbing frames
+                state = INFERENCE_STATE_SAMPLING;   // and back to grabbing a frame
                 break;
-            case INFERENCE_STATE_STOP:  // in this example we never reach this state
-                                        // but could be useful for your application
+
+            case INFERENCE_STATE_STOP:
                 break;
         }
     }
 
-    ei_stop_impulse();
+    ei_camera_stop();
+    ei_printf("Stopped inferencing\n");
 
     return true;
 }
 
 /**
- * @brief Run inference on the frame currently held by the camera driver
+ * @brief Run the impulse over the last captured frame
  * @return true if successful
  */
 static bool ei_run_inference(void)
 {
-    ei_impulse_result_t result = {nullptr};
-    ei::signal_t features_signal;
+    ei_impulse_result_t result = { 0 };
+    signal_t signal;
 
-    /* the signal is one float per pixel, pulled straight out of the camera
-     * buffer by ei_camera_get_data() - no intermediate feature array
-     */
-    features_signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
-    features_signal.get_data = &ei_camera_get_data;
+    signal.total_length = EI_CLASSIFIER_INPUT_WIDTH * EI_CLASSIFIER_INPUT_HEIGHT;
+    signal.get_data = &ei_camera_get_data;
 
-    EI_IMPULSE_ERROR res = run_classifier(&features_signal, &result, false);
+    EI_IMPULSE_ERROR res = run_classifier(&signal, &result,
+                                          IS_ENABLED(CONFIG_EI_INFERENCE_DEBUG));
 
     if (res != EI_IMPULSE_OK) {
-        ei_printf("ERR: Failed to run classifier\n");
-        ei_printf("ERR: %d\n", res);
+        ei_printf("ERR: Failed to run classifier (%d)\n", res);
         return false;
     }
 
     display_results(&ei_default_impulse, &result);
 
+#if EI_CLASSIFIER_OBJECT_DETECTION == 1
+    /* FOMO prints nothing when the frame is empty, so say so explicitly */
+    uint32_t found = 0;
+
+    for (uint32_t i = 0; i < result.bounding_boxes_count; i++) {
+        if (result.bounding_boxes[i].value > 0) {
+            found++;
+        }
+    }
+
+    if (found == 0) {
+        ei_printf("  No objects found\n");
+    }
+#endif
+
     return true;
 }
 
 /**
- * @brief Start inference process
+ * @brief Print the impulse settings and get the camera and classifier ready
  * @return true if successful
  */
-static bool ei_start_impulse(void)
+bool ei_start_inference(void)
 {
-    ei_printf("Edge Impulse camera inferencing on Zephyr\n");
+    ei_printf("Edge Impulse start inferencing on Zephyr\n");
 
     ei_printf("Inferencing settings:\n");
-    ei_printf("\tImage resolution: %dx%d\n", EI_CLASSIFIER_INPUT_WIDTH,
-              EI_CLASSIFIER_INPUT_HEIGHT);
+    ei_printf("\tImage resolution: %dx%d\n", EI_CLASSIFIER_INPUT_WIDTH, EI_CLASSIFIER_INPUT_HEIGHT);
     ei_printf("\tFrame size: %d\n", EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE);
-    ei_printf("\tNumber of output classes: %d\n",
-              sizeof(ei_classifier_inferencing_categories) /
-                  sizeof(ei_classifier_inferencing_categories[0]));
+    ei_printf("\tNo. of classes: %d\n",
+              (int)(sizeof(ei_classifier_inferencing_categories) /
+                    sizeof(ei_classifier_inferencing_categories[0])));
+    ei_printf("\tObject detection: %s\n", EI_CLASSIFIER_OBJECT_DETECTION ? "yes" : "no");
 
     if (ei_camera_start() == false) {
         ei_printf("ERR: Failed to start the camera\n");
         return false;
     }
 
+    run_classifier_init();
+
     return true;
 }
 
 /**
- * @brief Stop inference process
+ * @brief Ask the state machine to stop
  * @return true if successful
  */
-static bool ei_stop_impulse(void)
+bool ei_stop_inference(void)
 {
     ei_printf("Stopping inferencing\n");
-    ei_camera_stop();
     state = INFERENCE_STATE_STOP;
 
     return true;
